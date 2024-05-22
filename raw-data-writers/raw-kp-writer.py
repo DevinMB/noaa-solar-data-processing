@@ -13,18 +13,11 @@ from services.redis_service import write_to_redis_hashset, write_to_redis_sorted
 
 
 def fetch_data():
-    url = "https://services.swpc.noaa.gov/json/goes/primary/integral-protons-plot-1-day.json"
+    url = "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
     response = requests.get(url)
     response.raise_for_status()  # Raise an error for bad status codes
     data = response.json()
     return data
-
-def extract_energy_value(energy_str):
-    # Split the string at '=' and remove spaces
-    parts = energy_str.split('=')
-    if len(parts) > 1:
-        return parts[1].replace(" ", "")
-    return "UnknownEnergy"
 
 def process_and_write_data():
     try:
@@ -39,18 +32,16 @@ def process_and_write_data():
         # Write each object to Redis
         for obj in data:
             time_tag = obj["time_tag"]
-            energy = obj["energy"]
-            energy_value = extract_energy_value(energy)
             # Convert time_tag to a Unix timestamp (score)
-            score = int(time.mktime(time.strptime(time_tag, "%Y-%m-%dT%H:%M:%SZ")))
-            key = f"NOAA:integral_protons:{energy_value}"
+            score = int(time.mktime(time.strptime(time_tag, "%Y-%m-%dT%H:%M:%S")))
+            key = f"NOAA:kp"
             value = json.dumps(obj)
 
             write_to_redis_sorted_set(redis_username,redis_password,key,score,value)
-            
+        
         now = datetime.now()
         formatted_time = now.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"{formatted_time} : Data written to Redis successfully. Will run again in 6 hours :)")
+        print(f"{formatted_time} : Data written to Redis successfully. Will run again in 30 minutes :)")
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -59,7 +50,7 @@ def job():
 
 if __name__ == "__main__":
     # Schedule the job every 6 hours
-    schedule.every(6).hours.do(job)
+    schedule.every(.5).hours.do(job)
     
     # Run the first job immediately
     job()
