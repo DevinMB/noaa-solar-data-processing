@@ -7,7 +7,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.vault_service import authenticate_vault, get_redis_credentials
-from services.redis_service import write_to_redis_hashset
+from services.redis_service import write_to_redis_hashset, write_to_redis_sorted_set
 
 
 def fetch_data():
@@ -16,6 +16,13 @@ def fetch_data():
     response.raise_for_status()  # Raise an error for bad status codes
     data = response.json()
     return data
+
+def extract_energy_value(energy_str):
+    # Split the string at '=' and remove spaces
+    parts = energy_str.split('=')
+    if len(parts) > 1:
+        return parts[1].replace(" ", "")
+    return "UnknownEnergy"
 
 def process_and_write_data():
     try:
@@ -30,11 +37,16 @@ def process_and_write_data():
         # Write each object to Redis
         for obj in data:
             time_tag = obj["time_tag"]
-            energy_level = obj["energy"]
-            key = f"NOAA:integral_protons:{time_tag}:{energy_level}"
-            write_to_redis_hashset(redis_username, redis_password, key, obj)
+            energy = obj["energy"]
+            energy_value = extract_energy_value(energy)
+            # Convert time_tag to a Unix timestamp (score)
+            score = int(time.mktime(time.strptime(time_tag, "%Y-%m-%dT%H:%M:%SZ")))
+            key = f"NOAA:integral_protons:{energy_value}"
+            value = json.dumps(obj)
+
+            write_to_redis_sorted_set(redis_username,redis_password,key,score,value)
         
-        print("Data written to Redis successfully.")
+        print("Data written to Redis successfully. Will run again in 6 hours :)")
     except Exception as e:
         print(f"An error occurred: {e}")
 
